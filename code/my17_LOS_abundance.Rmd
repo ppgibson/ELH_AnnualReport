@@ -1,0 +1,534 @@
+---
+title: 'Smolt Abundance Estimates: MY 2017, Lostine trap'
+output:
+  pdf_document:
+    toc: yes
+  html_document:
+    toc: yes
+    toc_float: yes
+    toc_collapsed: yes
+---
+
+*This reported was generated on `r Sys.Date()`.*
+```{r libraries, echo=FALSE, warning=FALSE, message=FALSE}
+# This section needs to be run only once per session, to load the libraries
+knitr::opts_chunk$set(echo=FALSE, message=FALSE, warning=FALSE)
+library(knitr)
+library(kableExtra)
+```
+
+
+```{r Setup, echo=FALSE, warning=FALSE, message=FALSE}
+my.txt <- "my17"
+site.cur <- "LOS"
+
+source(paste("code//site_setup//setup", my.txt, site.cur, "abundance.R", sep="_"))  #reads in the site-specific setup file, which also brings in general setup and custom functions.
+```
+
+This report documents decisions used to develop estimates of smolt abundance at the Lostine trap during migratory year (MY) 2017, including both fall (early migrants) and spring (late migrants) seasons. At each step, results are compared with the methods and results from the previous abundance analysis for this site, as performed by Brad Garner and as reported in the ELH annual report.  This previous analysis is sometimes referred to as "BG", for Brad Garner. ("BP" = "Brad Power", who took over the abundance analysis after BG left, for the MY2018 and MY2019 reports.)
+
+Site Code: **`r site.cur`**
+
+Analysis options:
+
+- Was there any subsampling for this data set? **`r sub.sample`**
+
+- Should *catch* (aka, total new) numbers from INT days be included? **`r include.INT.catch`**
+
+- Which abundance estimator is used for simple abundance? **`r abund.est`**
+
+# PROCESS TRAP LOG
+```{r Initial_Processing}
+# Run first part of data processing, before the first custom mod
+source("code//1a_AbundancePrep_INT.R")
+
+# Sort out fish cols for easier processing
+# Create a version of log.te that doesn't have all the fish columns in the way 
+  fish.cols <- colnames(log)[17:57]
+  
+# Assign an automatic j.wk to confirm trap log versions
+  log.te$j.wk.auto <- ceiling(log.te$jday/7)
+```
+
+*Do the j.wks used in the trap log match the automatically assigned j.wks?*
+```{r, echo=TRUE}
+sum(log.te$j.wk != log.te$j.wk.auto)  #should be zero.
+```
+
+
+
+*Which days of trapping have usable fish data?*
+
+Trap modes:
+```{r, echo=FALSE, eval=TRUE}
+table(log$trapmode)
+```
+The answer to this question differs for catch vs mark vs recapture numbers. 
+
+### Trap Mode = INT (Interrupted)
+- catch numbers are included
+- recap numbers, and mark (release) numbers from the previous day, are excluded from TE estimates
+
+Standard ELH analysis protocol is that **mark** and **recapture** numbers associated with INT days (ie, the recaptures on that day and the releases from the day prior) numbers should be excluded from trap efficiency calculations. This is explicitly specified in the protocols for trap log preparation for abundance, and can be seen in most of the analysis working-spreadsheets from recent years (both BP's and BG's). However, it appears that BG simply neglected to complete this step for Lostine MY17 (in his worksheet, affected mark and recap numbers are highlighted in red, but not changed to zeros). 
+
+Unlike marks and recaps, trap **catch** numbers from INT days are always included in the total population estimate. Although this feels inconsistent, it is true that the simple population estimates that ELH has been reporting were already minimum values only, so including catch from more days, even if they are only partial days, will presumably only get the estimate closer to the true abundance. I confirmed that protocol in past analyses was indeed to include catch from INT days by reviewing some of the analysis working-spreadsheets, where catch from INT days was always included, even when the associated mark and recap numbers were successfully excluded. 
+
+Additionally, the trap log preparation protocol written/revised by BG suggests that the analyst should examine the INT days, and, depending on total revolutions and fish catch numbers (relative to nearby CON days), decide whether any of the INT days can be considered as having usable data for purposes of mark/recapture. 
+
+Examining the INT days from Lostine MY17:
+```{r, echo=FALSE}
+filter(select(log, season, date, jday, j.wk, gage, trapmode, revolutions, chs.new, sts.new), trapmode=="INT") %>% #, comments
+  kable() %>%
+  kable_styling(bootstrap_options = ("striped"), position="left", font_size=10) #full_width=TRUE, 
+
+```
+Of these dates, October 24 looks good enough to include the data as usable: revolutions are `r round(3655/4325, 2)` of the previous day, and chs catch is high. 
+```{r, echo=FALSE}
+filter(select(log, season, date, jday, j.wk, gage, trapmode, revolutions, chs.new, sts.new), jday %in% 296:299) %>%
+  kable() %>% #, comments
+  kable_styling(bootstrap_options = ("striped"), full_width=TRUE, position="left", font_size=10)
+```
+October 14 and Feb 16 seem pretty good, but to be conservative, I decided not to include them; October 14 has only `r round(2450/3844,2)` of the previous day's revs, and substantially lower catch than the previous day. Feb 16 has `r round(2590/3023, 2)` of the previous day's revs, but gage height was way higher than on Feb 15 (and rpms higher as well), so conditions likely were changing rapidly.  
+
+Conclusion: for purposes of the analysis, treat 2016-10-24 as [trapmode] = CON. 
+
+```{r, echo=TRUE}
+INT.mods
+
+```
+
+
+### Trap Mode = SUB (Subsample)
+- catch numbers tallied separately and expanded by subsampling proportion (see below) 
+- recap numbers, and any mark (release) numbers from the previous day, are excluded from TE estimates
+
+Standard ELH operations protocol is that there should be no TE releases (ie, marks) prior to a day of subsampling, since the trap will not be operating continuously in order to recapture marked fish.  Therefore, any **mark** and **recapture** numbers associated with SUB days (ie, the recaptures on that day and the releases from the day prior) should be excluded from trap efficiency calculations. However, it seems that in MY17, at least (and in MY16 too it looks like), staff operating the Lostine trap did go ahead and release TE fish prior to SUB days, including one extreme instance (2017-03-15) where they released 73 TE CHS prior to a SUB day. But I can see in the MY16 trap log that BG did remove these fish from the TE calculations. Once again, it appears that he simply forgot to do so for Lostine MY17.(It looks like field staff at UGR in MY17 avoided releasing fish prior to SUB days, so no exclusions required at the analytical stage there.)   
+
+### Trap Mode = NR (not running)
+As above, standard protocol is that TE releases prior to stopping the trap (usually unexpectedly; eg, fish were released, then trap stopped due to excessive debris) should be excluded from the TE calculations. There were several instances when this  occurred for Lostine MY17 (TE fish released prior to an unplanned trap shutdown; see table below), but once again it seems that BG simply neglected this step in his analysis for Lostine MY17. 
+```{r, echo=FALSE}
+filter(select(log, date, jday, j.wk, trapmode, startstop, chs.te.all, sts.te.all), startstop=="STP", chs.te.all>0 | sts.te.all>0) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+
+```
+
+Data check: are there any instances of [mark.data.good]=TRUE when [startstop]=STP? (generally, this should not happen.)
+In this data set, the one instance is okay; the STP is due to an abortive SUB session, following day is CAL.
+```{r}
+table(log.te$startstop, log.te$mark.data.good)
+#filter(select(log.te, -fish.cols), mark.data.good==TRUE, startstop=="STP") #this one is okay because next day is CAL.
+```
+
+
+### Total counts
+```{r source_1b_AbundancePrep, message=FALSE, warning=FALSE}
+# Given custom mods to INT days (etc), run calculation of CMR counts.
+source("code//1b_AbundancePrep_CMR.R")
+```
+
+With the above parameters, total catch/mark/recpature counts for the season:
+Note these counts do not include catch from SUB days! Those data will be processed separately.
+```{r season_CMR_counts, echo=FALSE, warning=FALSE, message=FALSE}
+season.cts <- cmr.counts %>%
+  group_by(myear, site, species, season) %>%
+  summarize(catch = sum(catch),
+            mark = sum(mark),
+            rec = sum(rec))
+season.cts <- mutate(season.cts, te.all = round(rec/mark,3))
+
+season.counts.tb <- kable(season.cts) %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+
+season.counts.tb
+```
+
+Compare the previous, BG version
+```{r, echo=FALSE}
+# Manually recreate BG's table for LOS MY17
+season.cts.bg <- season.cts
+season.cts.bg$catch <- c(4029, 632, 1405, 501)
+season.cts.bg$mark  <- c(877, 477, 769, 372)
+season.cts.bg$rec   <- c(155, 40, 63, 14)
+season.cts.bg <- mutate(season.cts.bg, te.all = round(rec/mark,3))
+
+season.cts.bg.tb <- kable(season.cts.bg) %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+
+season.cts.bg.tb
+
+```
+Discrepancies are due to:
+
+- chs spring catch: an aborted SUB day with 50 new CHS, I classified this as INT and inluded catch, where BG classified as STP and ignored catch.
+- sts spring catch: *BG mistakenly included SUB days in his supposedly non-sub counts for STS. This was a big error that will result in a big overestimate of STS abundance, as seen below. 
+- mark numbers: most discrepancies due to BG not removing releases prior to INT, SUB, or NR days. (Including 171 ineligible CHS releases in spring - quite a big difference.)
+- recap numbers: most discrepancies due to BG not removing recaps from INT and SUB days. 
+- additionally, there were a few instances where total TE releases or total TE recaptures (PIT + fin clip) were summed incorrectly in the trap log; BG used the totals columns as reported, but I re-calculated total TE mark/recap as PIT + fin clip. These mistakes include two missed STS recaps in fall; STS recaps are particularly important, given low estimated TE for STS. Also one instance of OTE - to be addressed later...
+- In general, my overall season estimates of TE are higher than BG's numbers, because of all the ineligible fish released prior to SUB or INT days, which were removed from my mark counts.  
+
+```{r, include=FALSE}
+# Excluded release numbers
+# In general, these are counts that BG should have, but neglected to, excluded from his analysis.
+marks.ex.ind <- which(log.te$mark.data.good==FALSE & (log.te$chs.te.all>0 | log.te$sts.te.all>0))
+marks.ex <- (select(log.te, season, date, trapmode, mark.data.good, chs.te.all, sts.te.all, comments))[marks.ex.ind,]
+marks.ex <- arrange(marks.ex, date)
+
+group_by(marks.ex, season) %>%
+  summarize(chs.rel = sum(chs.te.all, na.rm=TRUE),
+            sts.rel = sum(sts.te.all, na.rm=TRUE))
+
+# Excluded recaps
+recs.ex.ind <- which(log.te$rec.data.good==FALSE & (log.te$chs.re.all>0 | log.te$sts.re.all>0))
+recs.ex <- (select(log.te, season, date, trapmode, rec.data.good, chs.re.all, sts.re.all, comments))[recs.ex.ind,]
+group_by(recs.ex, season) %>%
+  summarize(chs.rec = sum(chs.re.all, na.rm=TRUE),
+            sts.rec = sum(sts.re.all, na.rm=TRUE))
+
+rm(marks.ex.ind, marks.ex, recs.ex.ind, recs.ex)
+```
+
+## Stratification
+Stratification approach used in previous years seems to be subjective.  Applying a straight minimum-10 recaps policy tends to produce more, shorter strata than BG used, at least for Lostine MY17.  BG's modifications to the trap log preparation protocol suggest that he aimed to combine "where possible". From the protocol: 
+We need at least 10 recaptures with every trap efficiency estimate.  Group weeks whenever weekly recaptures are less than 10.  Also, group weeks where water temperature and discharge are similar as these are primary influences on fish movement and trap capture efficiency. (Note: it is preferable to group weeks rather than not, this allows more OTE data to be used).
+
+Of course, if this logic were taken to its fullest extent, then we would not stratify at all. 
+I originally intended to use BG's stratification for the present re-analysis of abundance; however the adjusted mark and recap counts, as described above, means that this was not always possible:
+
+For STS, the previous (BG) stratification exactly matched the results of using a straight >= 10 recaps algorithm (with few recaps, there are few options for stratification).  For CHS, the stratifications were similar for spring, but two of BG's strata had to be pooled in my stratification, due to several ineligible recaps being excluded, as described above (leaving BG's stratum **b** with only 4 recaps):
+```{r}
+filter(select(fish.strata, species, season, j.wk, catch, mark, rec, cumsum, stratum.std, stratum.prv), 
+       species=="chs", season=="spring") %>%
+  arrange(as.numeric(j.wk)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+
+```
+
+BG's stratification differed most from the algorithm for CHS in fall:
+```{r}
+filter(select(fish.strata, species, season, j.wk, catch, mark, rec, cumsum, stratum.std, stratum.prv), 
+       species=="chs", season=="fall") %>%
+  kable() %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+
+```
+In fact, BG's stratification here does follow a >=10 algorithm, with the exception of stratum **c**, where he combined four TE weeks to get a total of 58 recaps. Not sure why he did so much lumping here, and nowhere else.  This becomes extra puzzling when considering the gage/temp data: after a long period of constant conditions, there is a big jump in gage height that occurs in the middle of the stratum, in fact right at the beginning of TE week 42 (Oct 14): 
+```{r, echo=FALSE, warnings=FALSE}
+print(ggplot(data=log.te[log.te$date<"2016-12-01",], aes(x=date)) + 
+  geom_point(aes(y=gage)) +
+  geom_vline(aes(xintercept=min(log.te$date[log.te$j.wk==39])), lty=2) + #start of stratum c
+  geom_vline(aes(xintercept=max(log.te$date[log.te$j.wk==42])), lty=2) + #end of stratum c
+  ylab("discharge (cfs)") +
+  labs(title="Lostine river discharge, fall MY17",
+             subtitle = ("Dashed lines show the start and end of stratum c as delineated in the previous analysis")) )
+
+filter(select(log.te, date, j.wk, gage, temp), date>"2016-10-08", date<"2016-10-17") %>%
+  kable() %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+```
+My theory is that BG intended the stratification to follow this sudden change in discharge, with a new stratum beginning with j.wk 42, but that he accidentally drew it to begin at j.wk 43 instead. 
+Therefore, for the current analysis, I created a custom stratification to follow BG's original (for fall CHS), but with stratum **d** beginning with j.wk 42. 
+
+```{r show_strat.mods, echo=TRUE}
+strat.mods
+```
+
+```{r source_1c_AbundancePrep, message=FALSE, warning=FALSE}
+source("code//1c_AbundancePrep_StratificationOTE.R")
+```
+
+## Overdue TE fish (OTE)
+Few (`r sum(ote.str$count)`) fish were noted/recorded as OTE in the LOS MY17 trap log; all STS, all marked with caudal clips rather than PIT tags.
+```{r}
+ote.str %>%
+  arrange(date) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+```
+I estimated the probable release week for each OTE fish, based on weekly clip types. 
+Of these `r sum(ote.str$count)` fish, only `r sum(!is.na(ote.str$strat.id))` crossed a stratum boundary. These confirmed OTE were removed from the recap count, and from the previous stratum's mark count. 
+
+Reviewing BG's analysis spreadsheet shows that he, too, retained the two potential OTE from spring (only one spring stratum for steelhead, so no OTE issue); he did not exclude one OTE from 2016-10-07 (maybe because it was captured on the first day of a new TE week, he thought therefore it must have been released in prv week despite wrong clip - ?); he did exclude the 2016-09-28 OTE from the recap count, but not from the corresponding release count. 
+
+## Subsampling
+The trap operated in SUB mode for `r sum(log$mode=="SUB")` days, and in CAL mode for `r sum(log$mode=="CAL")` days. Additionally, there were at least two days where SUB protocol was (apparently) started, but then shut down midway through due to high catch rate. Conceivably, these aborted SUB days could be processed using a modified SUB procedure to account for the number of periods actually sampled. However, BG certainly did not do this, and for the present analysis I am not going to do so either. Aborted SUB days were therefore treated as mode=INT. 
+
+Data from SUB days is expanded using catch rate data from adjacent CAL days. Ideally, any day(s) of subsampling should have three full CAL samples on the three days immediately before and the three days immediately after the subsampling (for estimating the subsample proportion). However, in practice this doesn't always work out. Therefore a bit more flexibility is required for assigning CAL days. I wrote a function to standardize this decision process, although the function might not work appropriately in all circumstances.  In general, the calculation is based on j.weeks:  all SUB days within a j.wk are grouped, and any CAL days within the same TE wk automatically apply to those SUB days.  Then the function checks for any contiguous CAL days before the first SUB day of the week/sub group, and any after, and includes up to three pre- and three post-SUB CAL days, even if they are in a different TE week. Function results should be examined manually; for example, if there is a date gap between the SUB and following CAL, and the CAL occur in a new j.wk, then those CAL days will not be assigned.
+
+For this data set, at least, the function produces basically the same result as BG's assignment. Only difference is for j.wk 13, where for some reason BG used only two of the preceeding CAL days, even though there are three contigous CAL days available.  No obvious reason in temp/gage numbers. 
+No custom mods needed. 
+```{r source_2_Calendar}
+source("code//2_FullCalendar.R")
+```
+
+```{r source_2_SubsamplePrep, message=FALSE, warning=FALSE}
+# Run subsampling prep code only if subsampling occurred at this site/year
+if (sub.sample == TRUE) {
+  source("code//3_SubsamplePrep.R")
+}
+```
+
+Approximately how many fish were caught during subsampling?
+```{r subsample_numbers, include=TRUE}
+sub.data %>%
+  group_by(species) %>%
+  summarize(catch = sum(catch), 
+            expanded.catch = round(sum(catch.exp), 0)) %>%
+    kable() %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+
+```
+vs. during the rest of the spring season:
+```{r nonsub_numbers, include=TRUE}
+nonsub.data[nonsub.data$season=="spring", ] %>%
+  group_by(species) %>%
+  summarize(catch = sum(catch)) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+
+```
+
+Note that the total daily catch values for subsample days as compiled in BG's hour-by-hour subsample data table sometimes differ slightly from the total.new values reported in the main trap log. Most of these discrepancies appear to be due to BG' neglecting to include true recaps or lone unmarked fish in his hourly table (ie, total.new count is greater than sum of hourly subsample counts), although there was at least one instance where the sum of hourly subsample counts was greater than the total.new trap log count.  Without access to the raw data sheets I can't confirm which version is correct; however, I suspect that data entry for the hourly subsample counts (likely performed by BG?) was the hastier/sloppier process.  Therefore, I will use the hourly subsample counts only to generate the subsample proportion estimates, but I will use the trap log total.new values as the total catch for those subsample days, in the abundance estimation.  
+
+Discrepancies:
+```{r compare_sub_cts}
+temp <- sub.cts.day %>%
+  rename(sum.sub.cts = p24) %>%
+  filter(mode=="SUB") %>%
+  select(species, date, mode, sum.sub.cts)
+
+sub.compare <- merge(temp, select(cal5, species, date, catch.log=catch),
+        by=c("species", "date"),
+        all.x=TRUE, all.y=FALSE)
+
+sub.compare %>%
+  filter(sum.sub.cts!=catch.log) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+
+rm(temp, sub.compare)
+```
+
+# ABUNDANCE ESTIMATION
+For comparison, abundance here is calculated in two different ways. 
+
+(1) Simple estimate using TE estimates by stratum (with bootstrapped variance est.) There is also a version of the simple abundance estimate derived from the bootstrap routine (ELH project has traditionally been using this value for the reported abundance estimates).  
+
+(2) Estimated based on a GAM that interpolates for missed trapping days; as implemented by Duarte and Petersen (rev. 2020).
+
+Method 1 is a minimum estimate, which ignores dates when the trap was not running.
+Method 2 uses the surrounding data to interpolate estimates for the missed trapping dates. 
+
+The immediately following diagnostic plots (if any) apply to the GAM-fitting in Method 2. There should be four sets of plots, one set each for 
+
+- CHS fall
+- CHS spring
+- STS fall
+- STS spring 
+
+```{r source_abundance, warning=FALSE, message=FALSE}
+# First clean up environment, except for run-specific variables
+  rm(list=ls()[!ls() %in% c("my.txt", "my.cur", "site.cur")])
+# ...and rerun site setup
+  source(paste("code//site_setup//setup", my.txt, site.cur, "abundance.R", sep="_"))
+
+# Set to FALSE to suppress printing the diagnostic plots
+  diagnostics <- FALSE
+
+# Now source abundance calculation script (which will also source boot and gam routines)
+  source(paste(dir_code, "4_CalculateAbundance.R", sep=""))
+```
+
+### 1. Simple/minimum estimates
+Apply the TE estimates for each stratum (calculated using the `r abund.est` estimator) to estimate the total number of fish moving past the trap that each stratum (j). Because no attempt is made to account for days when the trap was not operating, this approach calculates a **minimum** estimate for the total number migrants. 
+
+Essentially, this method is how the past abundance estimates reported by ELH have been calculated, although it seems that at least recently staff have actually been reporting the abundance estimates calculated by the bootstrap routine (which are not identical to the simple approach described above, but in practice the two methods produce very similar values).  For MY2017, it appears that BG applied the GAM routine to calculate abundance, but only for Catherine Creek; for the other sites, he used the standard simple/bootstrap estimates of abundance. 
+
+Using the Chapman estimator [(R-1)/(M-1)] rather than the simple Petersen estimator [R/M] leads to larger TE values, which leads to lower estimated abundance. Chapman weekly abundance estimates for Lostine were reduced by about 5% on average (range 1.75 - 9.09) relative to Petersen estimates. The magnitude of this effect depends on sample size, primarily the number of recaps: fewer recaps = greater difference between Chapman vs Petersen estimates = greater reduction in abundance (relative to Petersen).   
+
+Variance for the simple abundance estimates is calculated using a one-sample bootstrap method as described in Thedinga et al.  Note that the current (June 2020) version of the bootstrap routine mixes (I think this is an oversight) elements of both Petersen and Chapman estimators: The initial TE and abundance estimates are calculated using Chapman, but then when generating the bootstrapped vector of estimated TE values, it uses simple Petersen estimates.  The net effect is that the abundance estimates reported by the boot routine are much closer to the simple Petersen estimate than to the simple Chapman estimate.  This inconsistency is something I will fix after talking with Duarte and Peterson. Not sure how it impacts variance estimates.
+
+```{r SimpleAbundance, echo=FALSE}
+merge(select(simp.byseas, myear, site, species, season, est.simp),
+      select(boot.byseas, myear, site, species, season, est.boot, se.boot),
+      by=c("myear", "site", "species", "season"), all=TRUE) %>%
+  kable(digits=0) %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+```
+
+Compare the simple values calculated by BG:
+```{r BG_SimpAbund}
+# Manually compile BG's numbers in the order chs.fall, chs.spring, sts.fall, sts.spring
+bg.abund <- data.frame(species = c("chs", "chs", "sts", "sts"), 
+                       season = c("fall", "spring", "fall", "spring"),
+                       abund = c(27427, 10726, 18244, 16615), 
+                       ci.95 = c(3303, 2245, 3690, 3448) ) %>%
+  mutate(se = ci.95/1.96)
+
+bg.abund %>%
+  kable(digits=0) %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+
+```
+My recalculated abundance estimates are lower than those calculated and reported by BG. The reasons for this discrepancy are discussed in more detail above in the 'Total Counts' section.  To summarize: I excluded more Mark (release) fish from the TE calculation, leading to higher estimates for TE, leading to lower estimates for abundance.  Additionally, BG erroneously double-counted the STS catch from SUB days in his spring STS estimate.   
+
+
+### 2. Interpolated estimates using a GAM
+Migrant abundance was also estimated using a general additive model to smooth patterns in migrant numbers and to interpolate for missed trapping days. The following results were calculated using a routine created by Duarte and Petersen, and revised in Feb 2020 to improve the calculation of aggregate standard errors. See above for diagnostic plots associated with model fits. 
+
+In the plots below, the daily simple estimated abundance values (daily catch expanded by TE value for the stratum) are plotted as grey (or green) points, while the GAM daily estimates are shown as red lines; the pale red ribbons show the the confidence intervals associated with each daily estimate. Thick black bars at the base of each plot indicate dates when the trap was not operating. 
+
+```{r Plot_GAM, echo=FALSE, warning=FALSE, message=FALSE, fig.width=10}
+# Create an index to visually show when the trap was not operating
+  calendar.gam$gap.ind <- NA
+    calendar.gam$gap.ind[calendar.gam$fish.data==FALSE] <- -2
+
+# Create an index to mark SUB vs non-SUB days
+  calendar.gam$mode.ind <- "CON"
+    calendar.gam$mode.ind[calendar.gam$trapmode=="SUB"] <- "SUB"
+    
+# Plot daily estimated values vs meaured catch
+basic <- ggplot(data=calendar.gam, aes(x=date)) +
+  geom_line(aes(y=catch/(rec/mark)), color="dark grey") +  #daily simple estimate
+  geom_point(aes(y=catch/(rec/mark), color=mode.ind, shape=mode.ind)) +  #daily simple estimate
+  geom_line(aes(y=est.gam), color="red") +  #interpolated
+  geom_line(aes(y=gap.ind), color="black", size=1.5) +  #Clearly show when trap was not operatin
+  geom_ribbon(aes(ymin=ci.low, ymax=ci.high), alpha=0.1, fill="red") + #Band representing std error
+  coord_cartesian(ylim=c(0, 1500)) +
+  facet_grid(species ~ season, scales="free") +
+  theme(panel.grid.minor=element_blank()) + 
+  theme_bw() 
+
+# basic
+basic +
+  xlab("Date") + ylab("Abundance") +
+  scale_color_manual(values = c("#666666", "#009900"), 
+                     name="Trap\nmode") +
+  scale_shape_discrete(name="Trap\nmode")
+
+
+```
+```{r GAM_results}
+# Display a basic table of results
+gam.byseas %>%
+  kable(digits=0) %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+```
+In general these results look reasonable. Daily SE/confidence intervals increase during non-operation periods; the longer the duration of non-operation, the greater the uncertainty. However, these enormous confidence intervals as plotted above are not reflected in the daily nor the aggregate standard error values; instead, for some of the dates with the widest confidence intervals (including the absurd x10^9 value) the routine reports a standard error of 0 (associated with a daily abundance estimate of 0).
+
+```{r missed_day_results}
+# Examine the GAM output for missed trapping days
+miss.days <- calendar.gam$j.day[calendar.gam$fish.data==TRUE]  #vector of dates when trap not operating, no data
+
+miss.data <- filter(gam.byday, j.day %in% miss.days)
+miss.data <- mutate(miss.data, ci.width = ci.high - ci.low)
+
+head(arrange(miss.data, -ci.width)) %>%
+  kable %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+
+```
+
+Both of these uncertainty estimates (SE=0 or SE>one million) seem quite implausible.  Why is the routine generating these values, and how can the estimation of uncertainty be improved? 
+
+*Remaining questions about GAM results:* 
+
+- Why does the estimated abundance curve sometimes have a dome shape during interpolation (trap non-operation) periods? (CHS fall mid Oct and again in early Nov; CHS early spring; STS early spring.)
+
+- Why are the confidence intervals estimated for STS so implausibly enormous? And, relatedly, why are the aggregate SE values so low? (see below)
+
+- Why are reported SE/CI values for total abundance so low? (About an order of magnitude less than bootstrap SE estimates.) A standard error of 98 for STS spring abundance (ie, plus or minus `r 1.96*98` fish) seems implausibly low. I note that daily CI estimates for STS get implausibly huge during the early non-operation periods; but, daily SE estimates for these periods are all zero -> which of course is implausibly low. 
+
+- Would the total season estimates (for abundance or variance) change much if I cut off the few days of catch from early spring (which occurs prior to a long non-operation period)?
+
+
+### 3. Compare abundance results
+```{r Compare_Abund_results}
+all.byseas %>%
+  kable(digits=0) %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+```
+
+**Missed fish:**
+How many fish were missed during non-operational periods? (According to GAM estimates.) 
+```{r}
+missed <- calendar.gam %>%
+  filter(fish.data==FALSE) %>%
+  group_by(species, season) %>%
+  summarize(fish.missed = sum(est.gam),
+            days.missed = n())
+
+missed <- merge(gam.byseas, missed, by=c("species", "season"), all=TRUE)
+missed <- merge(missed, simp.byseas[, 1:5], 
+                by=c("myear", "site", "species", "season"), all=TRUE)
+missed <- mutate(missed, prop.missed = round(fish.missed/est.gam, 2))
+
+  all.days <- calendar.gam %>%
+    group_by(species, season) %>%
+    summarize(n.days = n())
+
+missed <- merge(missed, all.days, by=c("species", "season"), all=TRUE)
+
+missed %>%
+  select(myear, site, species, season, n.days, days.missed, 
+         est.simp, est.gam, fish.missed, prop.missed) %>% 
+  kable() %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+
+rm(all.days)
+```
+The plots of missed days don't look like too many important days were missed, but comparing the interpolated abundance estimates to the simple, minimum estimates suggests that about `r round(mean(missed$prop.missed), 2)` of the total fish abundance (range `r range(missed$prop.missed)`) passed the trap on days when it was not running, and thus these fish are not counted in the toal abundance estimate.  By this assessment, the reported "minimum abundance" estimates are a substantial underestimate from the probable true abundance.     
+
+**Percent migrating early:** 
+What proportion of the total number of migrants for this MY migrated past the trap in fall (early) vs in spring (late)?
+```{r pct_mig_early}
+totals <- all.byseas %>%
+  group_by(species) %>%
+  summarize(tot.simp= sum(est.simp),
+            tot.gam = sum(est.gam))
+
+totals <- merge(all.byseas, totals, by="species", all=TRUE)
+totals <- mutate(totals, 
+                 prop.simp = round(est.simp/tot.simp, 2),
+                 prop.gam = round(est.gam/tot.gam, 2) )
+
+select(totals, myear, site, species, season, 
+       est.simp, prop.simp, 
+       est.gam, prop.gam ) %>%
+  kable() %>%
+  kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+```
+For Chinook, about 3/4 of the total migration left in the fall; for steelhead, it was about 60%.  Proportions of early vs. late migrants are very similar between simple vs. GAM abundance estimates. 
+
+
+# MEDIAN MIGRATION DATE
+For comparison, I estimated median migration date using three different methods, described below. I also manually brought in BG's values for comparison. 
+
+- catch: based only on the numbers of fish caught in the trap. Note that for this analysis, I did use expanded catch estimates for subsample days. 
+
+- exp.catch: based on daily catch numbers expanded by TE for the stratum. This method is equivalent to the simple abundance estimates. 
+
+- gam: based on daily abundance values as estimated by the GAM routine. 
+
+- bg: median dates as reported by BG. BG did not leave any documentation of his methods, but as far as I have been able to recreate, he calculated estimated abundance by TE week (so, using expanded catch, then summed by week), and then calculated median date as if all fish passing during that week had passed on the first day of the TE week. So in general, BG's dates are likely to be similar to my method (2), but a bit earlier, due to the inherent strong bias toward the beginning of the TE week. 
+
+Also note that for this data set, BG mistakenly counted STS catch during subsample days twice, so this will also have affected his median migration date calculation. 
+
+```{r calculate_median_dates}
+# Bring in BG's values
+  bg <- c("2016-10-14", "2017-03-19", "2016-10-14", "2017-04-09")
+  median.dates <- cbind(median.dates, bg)
+  
+  rm(bg)
+
+# Display the comparison table
+  median.dates %>%
+    kable() %>%
+    kable_styling(bootstrap_options = ("striped"), full_width=FALSE, position="left", font_size=10)
+
+```
+
+To match the current standard reporting of a simple abundance estimate, I will save the analogous, expanded catch version of the median migration date for official reporting. 
+
+*FINIS*
