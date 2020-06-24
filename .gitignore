@@ -1,0 +1,19 @@
+.Rproj.user
+.Rhistory
+.RData
+.Ruserdata
+
+# ignore saved R objects (e.g., posterior samples)
+*.rds
+
+# ignore html and pdf files (generated from Rmarkdown
+*.html
+*.pdf
+*.tex
+
+# ignore derived data files: these are reproducible from source at any time
+data_derived/*
+
+# ignore anything in the scratch and output folders 
+scratch/*
+output/*
